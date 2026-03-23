@@ -51,7 +51,10 @@ Per usare questo bridge è necessario avere **già un account attivo** sull'app 
 
 1. In Home Assistant vai su **Impostazioni → Add-on → Store add-on**
 2. Clicca sui tre punti in alto a destra → **Repository**
-3. Aggiungi l'URL di questo repository
+3. Aggiungi questo URL:
+   ```
+   https://github.com/cash83/wonderfree-cloud-bridge
+   ```
 4. Installa **Wonderfree Cloud Bridge**
 5. Vai su **Configurazione** e inserisci i tuoi dati
 6. Avvia l'add-on
