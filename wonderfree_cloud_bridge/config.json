@@ -1,6 +1,6 @@
 {
   "name": "Wonderfree Cloud Bridge",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "slug": "wonderfree_cloud_bridge",
   "description": "Bridge MQTT per Home Assistant compatibile con dispositivi Acceleronix. Piattaforme: wonderfree, landbook, landecia, northamerica, europe, china. Inserisci solo email, password e piattaforma: tutto il resto viene scoperto automaticamente.",
   "arch": ["aarch64", "amd64", "armv7", "armhf", "i386"],
@@ -9,7 +9,6 @@
   "boot": "auto",
   "host_network": true,
   "options": {
-
     "wf_email": "",
     "wf_password": "",
     "app": "wonderfree",
@@ -56,19 +55,18 @@
     "quick_refetch_after_refresh": true
   },
   "schema": {
-
     "wf_email": "str",
-    "wf_password": "str",
-    "app": "str",
+    "wf_password": "password",
+    "app": "list(wonderfree|landbook|landecia|northamerica|europe|china|europe-uat|northamerica-uat|china-uat)",
 
     "mqtt_host": "str",
     "mqtt_port": "int",
-    "mqtt_user": "str",
-    "mqtt_pass": "str",
+    "mqtt_user": "str?",
+    "mqtt_pass": "password?",
     "ha_base": "str",
     "discovery_prefix": "str",
 
-    "log_level": "str",
+    "log_level": "list(DEBUG|INFO|WARNING|ERROR)",
     "publish_only_changed": "bool",
     "dedup_ms": "int",
     "poll_min": "int",
@@ -86,7 +84,7 @@
     "startup_burst_period": "int",
     "select_grace_seconds": "int",
     "cmd_grace_seconds": "int",
-    "send_strategy": "str",
+    "send_strategy": "list(auto|cloud|local|both)",
 
     "output_power_min": "int",
     "output_power_max": "int",
