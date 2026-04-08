@@ -211,6 +211,70 @@ def attach(Bridge):
 
     Bridge._send_bus_mask_0011 = _send_bus_mask_0011
 
+    def _fetch_cloud_device_status(self, sess) -> Optional[bool]:
+        """Read online/offline from userDeviceList, same cloud view shown by the app."""
+        now = time.time()
+        last_check = float(getattr(self, "_last_cloud_status_check", 0.0) or 0.0)
+        poll_sec = 60.0
+        if (now - last_check) < poll_sec:
+            return getattr(self, "_cloud_online_status", None)
+
+        self._last_cloud_status_check = now
+
+        try:
+            r = sess.get(
+                BASE_URL.rstrip("/") + "/v2/binding/enduserapi/userDeviceList",
+                params={"pageSize": 20, "isAssociated": 1},
+                timeout=max(float(HTTP_TIMEOUT), 8.0),
+            )
+            j = r.json()
+            if j.get("code") != 200:
+                raise RuntimeError(f"code={j.get('code')} msg={j.get('msg')!r}")
+
+            data = j.get("data") or {}
+            items = data.get("list") if isinstance(data, dict) else data
+            if not isinstance(items, list):
+                return getattr(self, "_cloud_online_status", None)
+
+            for item in items:
+                if str(item.get("deviceKey") or "").strip() != str(DEVICE_KEY):
+                    continue
+
+                raw_online = item.get("onlineStatus")
+                online = None
+                if raw_online is not None:
+                    try:
+                        online = int(raw_online) == 1
+                    except Exception:
+                        online = str(raw_online).strip() in ("1", "true", "True", "online", "ONLINE", "在线")
+                if online is None:
+                    dev_status = str(item.get("deviceStatus") or "").strip()
+                    if dev_status:
+                        online = dev_status not in ("离线", "offline", "OFFLINE", "0")
+
+                prev = getattr(self, "_cloud_online_status", None)
+                self._cloud_online_status = online
+                self._device_status_last_detail = {
+                    "deviceStatus": item.get("deviceStatus"),
+                    "onlineStatus": item.get("onlineStatus"),
+                    "lastConnTime": item.get("lastConnTime"),
+                    "lastOfflineTime": item.get("lastOfflineTime"),
+                }
+                if prev is not online:
+                    log.info(
+                        f"[CLOUD-STATUS] online={online} "
+                        f"deviceStatus={item.get('deviceStatus')} "
+                        f"lastConnTime={item.get('lastConnTime')} "
+                        f"lastOfflineTime={item.get('lastOfflineTime')}"
+                    )
+                return online
+
+        except Exception as e:
+            log.debug(f"[CLOUD-STATUS] fetch failed: {e}")
+
+        return getattr(self, "_cloud_online_status", None)
+    Bridge._fetch_cloud_device_status = _fetch_cloud_device_status
+
     def _maybe_send_periodic_mask(self, throttle_s: Optional[float] = None):
         """Invia il frame mask 0x0011 periodicamente per imitare meglio l'app.
 
@@ -263,9 +327,21 @@ def attach(Bridge):
                 tok = self.token_mgr.ensure()
                 sess.headers["Authorization"] = normalize_bearer(tok)
 
+                # Cloud online/offline view, same source used by the app device list.
+                cloud_online = self._fetch_cloud_device_status(sess)
+                if cloud_online is False:
+                    self._pending_offline_since = now
+                    self._device_force_offline = True
+                    self._onl_declared_offline = True
+                    if self.local:
+                        self.local.publish(AVAIL_TOPIC, AVAIL_PAYLOAD_OFF, qos=0, retain=True)
+                    # Se il cloud lo vede offline, non stimolare il device e non leggere HTTP cached.
+                    # NOTA: nessun time.sleep qui — ci pensa il finally per evitare doppio sleep.
+                    continue
+
                 # App-like BUS mask (0x0011) + refresh (0x009A0002) per stimolare il BURST.
                 # IMPORTANTISSIMO: niente "mitragliate".
-                if not getattr(self, "_startup_bus_done", False) and (time.time() - self.start_t < 15):
+                if (cloud_online is not False) and (not getattr(self, "_startup_bus_done", False)) and (time.time() - self.start_t < 15):
                     self._startup_bus_done = True
 
                     # 1) mask (opzionale)
@@ -287,34 +363,32 @@ def attach(Bridge):
                 else:
                     # refresh periodico BUS 0x009A mode=0x02
                     now = time.time()
-                    burst_until = getattr(self, "_burst_until", 0.0)
+                    if cloud_online is False:
+                        can_send = False
+                        burst_until = getattr(self, "_burst_until", 0.0)
+                    else:
+                        burst_until = getattr(self, "_burst_until", 0.0)
 
-                    if not hasattr(self, "_next_refresh_02"):
-                        self._next_refresh_02 = now + random.uniform(float(REFRESH_MIN), float(REFRESH_MAX))
+                        if not hasattr(self, "_next_refresh_02"):
+                            self._next_refresh_02 = now + random.uniform(float(REFRESH_MIN), float(REFRESH_MAX))
 
-                    if not hasattr(self, "_next_any_refresh"):
-                        self._next_any_refresh = 0.0
+                        if not hasattr(self, "_next_any_refresh"):
+                            self._next_any_refresh = 0.0
 
-                    can_send = (now >= float(burst_until)) and (now >= float(self._next_any_refresh))
+                        can_send = (now >= float(burst_until)) and (now >= float(self._next_any_refresh))
 
-                    if can_send and now >= float(getattr(self, "_next_refresh_02", now + 1e9)):
-                        self._maybe_send_periodic_mask()
-                        self._send_bus_refresh(mode=0x02, throttle_s=0.0)
-                        did_refresh = True
-                        self._next_refresh_02 = now + random.uniform(float(REFRESH_MIN), float(REFRESH_MAX))
-                        self._next_any_refresh = now + max(float(REFRESH_MIN_GAP), 1.0)
+                        if can_send and now >= float(getattr(self, "_next_refresh_02", now + 1e9)):
+                            self._maybe_send_periodic_mask()
+                            self._send_bus_refresh(mode=0x02, throttle_s=0.0)
+                            did_refresh = True
+                            self._next_refresh_02 = now + random.uniform(float(REFRESH_MIN), float(REFRESH_MAX))
+                            self._next_any_refresh = now + max(float(REFRESH_MIN_GAP), 1.0)
 
                 if did_refresh:
                     delay_s = max(0.0, float(REFRESH_HTTP_DELAY_MS) / 1000.0)
                     if delay_s > 0:
                         time.sleep(delay_s)
 
-                # Se onl_ ha dichiarato il device offline, salta HTTP completamente:
-                # evita spam al cloud e il BUS refresh mantiene viva la sessione WebSocket.
-                # onl_ value=1 notificherà l'accensione in tempo reale.
-                if getattr(self, '_device_force_offline', False):
-                    time.sleep(float(period))
-                    continue
 
                 # Salta HTTP solo se: ACK fresco (<30s) E last_publish_ts è recente (<STALE_SEC/2).
                 # Se last_publish_ts è vecchio (device potenzialmente offline) HTTP deve girare
@@ -322,7 +396,7 @@ def attach(Bridge):
                 _ack_age   = time.time() - getattr(self, '_last_ack_ts', 0)
                 _ts_age    = time.time() - self.last_publish_ts if self.last_publish_ts > 0 else 9999
                 if not did_refresh and _ack_age < 30 and _ts_age < (STALE_SEC / 2):
-                    time.sleep(float(period))
+                    # NOTA: nessun time.sleep qui — ci pensa il finally per evitare doppio sleep.
                     continue
 
                 # Fetch dati real-time (HTTP)
@@ -457,7 +531,7 @@ def attach(Bridge):
         for n in ["device_status","signal_strength_set","mode","led_status_set","output_power_set",
                   "relay_mode","light_mode","electricity_data"]:
             _int(n)
-        for n in ["ac_switch","dc_switch","grid_power_switch_set","ac_charging_limit_set","beep_setting_set","offscreen_switch",
+        for n in ["ac_switch","dc_switch","grid_power_switch_set","ac_charging_limit_set","beep_setting_set",
                   "switch","child_lock","over_charge"]:
             _bool(n)
 
@@ -684,7 +758,13 @@ def attach(Bridge):
         # switch states
         st["ac_switch"] = kv.get("ac_switch")
         st["dc_switch"] = kv.get("dc_switch")
-        st["offscreen_switch"] = kv.get("offscreen_switch")
+        st["screen_sleeptime_set"] = kv.get("screen_sleeptime_set")
+        _screen_timeout_raw = kv.get("screen_sleeptime_set")
+        try:
+            _screen_timeout_raw = int(float(_screen_timeout_raw)) if _screen_timeout_raw is not None else None
+        except Exception:
+            pass
+        st["screen_sleeptime_set_label"] = SCREEN_TIMEOUT_LABEL_BY_VAL.get(_screen_timeout_raw)
         st["ac_charging_limit"] = kv.get("ac_charging_limit_set")
         st["beep_setting"] = kv.get("beep_setting_set")
         st["led_status"] = kv.get("led_status_set", kv.get("led_status"))
@@ -764,7 +844,6 @@ def attach(Bridge):
 
         maybe_pub_bool("ac_switch", AC_STATE_TOPIC, st.get("ac_switch"))
         maybe_pub_bool("dc_switch", DC_STATE_TOPIC, st.get("dc_switch"))
-        maybe_pub_bool("offscreen_switch", SCREEN_STATE_TOPIC, st.get("offscreen_switch"))
         maybe_pub_bool("grid_output", GRIDOUT_STATE_TOPIC, st.get("grid_output"))
         maybe_pub_bool("ac_charging_limit", SLOWCHG_STATE_TOPIC, st.get("ac_charging_limit"))
         maybe_pub_bool("beep_setting", BEEP_STATE_TOPIC, st.get("beep_setting"))
@@ -790,6 +869,7 @@ def attach(Bridge):
                 self.pending.pop(key, None)
 
         maybe_pub_sel("mode_set", MODE_STATE_TOPIC, st.get("mode_set"))
+        maybe_pub_sel("screen_sleeptime_set", SCREEN_STATE_TOPIC, st.get("screen_sleeptime_set_label"))
         # output_power_set already published via OUTPOW_STATE_TOPIC when command sent
 
     # ---- Connectors ----
@@ -805,17 +885,45 @@ def attach(Bridge):
                 # _last_ack_ts escluso: il cloud manda ack_ anche col device SPENTO
                 # (dati cached) → includerlo impedisce il corretto rilevamento offline.
                 # HTTP gira ogni max 30s → con STALE_SEC=300s non ci sono falsi offline.
-                force_off = getattr(self, '_device_force_offline', False)
-                is_stale = force_off or (
-                    (last_ts > 0 and now - last_ts > STALE_SEC) or
-                    (last_ts == 0 and bridge_age > STALE_SEC + 30)
+                pending_offline_since = float(getattr(self, "_pending_offline_since", 0.0) or 0.0)
+                offline_debounce_sec = 45
+
+                debounced_offline = (
+                    pending_offline_since > 0 and
+                    (time.time() - pending_offline_since) >= offline_debounce_sec
                 )
-                if is_stale:
+
+                cloud_status = getattr(self, "_cloud_online_status", None)
+                cloud_age = time.time() - float(getattr(self, "_last_cloud_status_check", 0.0) or 0.0)
+                cloud_fresh = bool(
+                    cloud_status is not None and
+                    cloud_age <= 180.0
+                )
+
+                if cloud_fresh:
+                    is_online = bool(cloud_status)
+                    self._device_force_offline = not is_online
                     if self.local:
-                        self.local.publish(AVAIL_TOPIC, AVAIL_PAYLOAD_OFF, qos=0, retain=True)
+                        self.local.publish(
+                            AVAIL_TOPIC,
+                            AVAIL_PAYLOAD_ON if is_online else AVAIL_PAYLOAD_OFF,
+                            qos=0,
+                            retain=True,
+                        )
                 else:
-                    if self.local:
-                        self.local.publish(AVAIL_TOPIC, AVAIL_PAYLOAD_ON, qos=0, retain=True)
+                    is_stale = debounced_offline or (
+                        (last_ts > 0 and now - last_ts > STALE_SEC) or
+                        (last_ts == 0 and bridge_age > STALE_SEC + 30)
+                    )
+
+                    # aggiorna flag reale solo qui
+                    self._device_force_offline = bool(debounced_offline)
+                    if is_stale:
+                        if self.local:
+                            self.local.publish(AVAIL_TOPIC, AVAIL_PAYLOAD_OFF, qos=0, retain=True)
+                    else:
+                        if self.local:
+                            self.local.publish(AVAIL_TOPIC, AVAIL_PAYLOAD_ON, qos=0, retain=True)
             except Exception:
                 pass
 

@@ -148,39 +148,67 @@ def attach(Bridge):
                 log.debug(f"[REMOTE] BURST topic={topic} len={len(payload)} hex={payload[:64].hex()}")
 
             if topic.endswith("/bus"):
+                self._pending_offline_since = 0.0
+                self._device_force_offline = False
+                self._onl_declared_offline = False  # /bus arriva solo da device realmente attivo
+                self._last_ack_ts = now
                 log.debug(f"[REMOTE] BUS payload len={len(payload)} hex={payload[:32].hex()}")
 
-            # --- PARSING /onl_: notifica online/offline immediata dal cloud ---
+            # --- PARSING /onl_: notifica online/offline dal cloud con debounce ---
             if topic.endswith("/onl_"):
                 try:
                     j = json.loads(payload.decode("utf-8", errors="ignore"))
                     d = j.get("data") or {}
                     val = d.get("value") if isinstance(d, dict) else None
                     if val is not None:
+                        startup_age = now - getattr(self, "start_t", now)
+
+                        # init lazy
+                        if not hasattr(self, "_pending_offline_since"):
+                            self._pending_offline_since = 0.0
+
                         if int(val) == 0:
-                            # Ignora value=0 nei primi 15s: sono retained da sessioni precedenti
-                            startup_age = now - getattr(self, "start_t", now)
-                            if startup_age < 15:
+                            cloud_status = getattr(self, "_cloud_online_status", None)
+                            # Ignora retained iniziali solo se il cloud NON ha gia' confermato offline.
+                            if startup_age < 15 and cloud_status is not False:
                                 log.debug(f"[ONL] Ignoring offline (value=0) during startup grace ({startup_age:.1f}s)")
                             else:
-                                # Device spento: offline immediato e blocca HTTP dall'overridare
-                                log.info("[ONL] Device offline (value=0) -> AVAIL OFF immediato")
-                                self._device_force_offline = True
-                                self.last_publish_ts = 0
-                                self._last_ack_ts = 0
-                                if self.local:
-                                    from wf_config import AVAIL_TOPIC, AVAIL_PAYLOAD_OFF
-                                    self.local.publish(AVAIL_TOPIC, AVAIL_PAYLOAD_OFF, qos=0, retain=True)
+                                # Se il cloud ha gia' detto offline, forza subito offline.
+                                if cloud_status is False:
+                                    self._pending_offline_since = now
+                                    self._device_force_offline = True
+                                    self._onl_declared_offline = True
+                                    if getattr(self, "local", None):
+                                        self.local.publish(AVAIL_TOPIC, AVAIL_PAYLOAD_OFF, qos=0, retain=True)
+                                    log.info("[ONL] Device offline (value=0) confirmed by cloud -> forced offline")
+                                else:
+                                    # NON forzare offline subito: avvia solo debounce
+                                    if self._pending_offline_since <= 0:
+                                        self._pending_offline_since = now
+                                        self._onl_declared_offline = True  # blocca reset da /ack_ cached
+                                        log.info("[ONL] Device offline (value=0) -> pending debounce")
+                                    else:
+                                        log.debug(f"[ONL] still pending offline for {now - self._pending_offline_since:.1f}s")
                         else:
-                            # Device acceso: rimuovi blocco offline, aggiorna _last_ack_ts
+                            # online immediato: annulla pending offline
                             log.info(f"[ONL] Device online (value={val})")
+                            self._pending_offline_since = 0.0
                             self._device_force_offline = False
+                            self._onl_declared_offline = False
                             self._last_ack_ts = now
+
                 except Exception as e:
                     log.debug(f"[ONL] parse error: {e}")
 
             # --- PARSING /ack_: JSON con KV sensori ---
             if topic.endswith("/ack_"):
+                # NON resettare pending_offline se onl_ ha già dichiarato il device offline.
+                # Il cloud manda /ack_ con dati cached anche a device spento: resettare qui
+                # impedirebbe al watchdog di rilevare correttamente l'offline.
+                if not getattr(self, '_onl_declared_offline', False):
+                    self._pending_offline_since = 0.0
+                    self._device_force_offline = False
+                self._last_ack_ts = now
                 try:
                     j = json.loads(payload.decode("utf-8", errors="ignore"))
 

@@ -1,12 +1,9 @@
 # Auto-split from original bridge.py
 # Module: wf_config
 from __future__ import annotations
-import os, time, json, uuid, random, string, hashlib, base64, logging, threading, urllib.parse
-from typing import Optional, Dict, Any, List
-import requests
-import paho.mqtt.client as mqtt
-from Crypto.Cipher import AES
-from logging.handlers import RotatingFileHandler
+import os, time, json, logging
+import atexit
+import logging.handlers
 
 # -------------------- CONFIG --------------------
 
@@ -56,9 +53,6 @@ logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
-
-import atexit
-import logging.handlers
 
 _log_handler = logging.handlers.RotatingFileHandler("bridge.log", maxBytes=1_000_000, backupCount=5)
 _log_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
@@ -138,21 +132,21 @@ log.info(f"[CONFIG] ACCEL_CLIENT={ACCEL_CLIENT}")
 
 
 # Poll timing (adaptive)
-POLL_MIN = int(os.getenv("POLL_MIN", "2"))
-POLL_MAX = int(os.getenv("POLL_MAX", "20"))
-STARTUP_BURST_SECONDS = int(os.getenv("STARTUP_BURST_SECONDS", "60"))
-STARTUP_BURST_PERIOD = int(os.getenv("STARTUP_BURST_PERIOD", "2"))
+POLL_MIN = int(os.getenv("POLL_MIN", "30"))
+POLL_MAX = int(os.getenv("POLL_MAX", "60"))
+STARTUP_BURST_SECONDS = int(os.getenv("STARTUP_BURST_SECONDS", "30"))
+STARTUP_BURST_PERIOD = int(os.getenv("STARTUP_BURST_PERIOD", "3"))
 
 # --- BUS refresh pacing (anti-ban / anti-spam) ---
-REFRESH_MIN = float(os.getenv("REFRESH_MIN", "60"))
-REFRESH_MAX = float(os.getenv("REFRESH_MAX", "90"))
-REFRESH_MIN_GAP = float(os.getenv("REFRESH_MIN_GAP", "8"))
+REFRESH_MIN = float(os.getenv("REFRESH_MIN", "150"))
+REFRESH_MAX = float(os.getenv("REFRESH_MAX", "200"))
+REFRESH_MIN_GAP = float(os.getenv("REFRESH_MIN_GAP", "20"))
 
 STARTUP_REFRESH_COUNT = int(os.getenv("STARTUP_REFRESH_COUNT", "1"))
-STARTUP_REFRESH_JITTER_MS = int(os.getenv("STARTUP_REFRESH_JITTER_MS", "900"))
+STARTUP_REFRESH_JITTER_MS = int(os.getenv("STARTUP_REFRESH_JITTER_MS", "1500"))
 DISABLE_STARTUP_MASK = os.getenv("DISABLE_STARTUP_MASK", "false").strip().lower() in ("1", "true", "yes", "on")
-MASK_REFRESH_INTERVAL = float(os.getenv("MASK_REFRESH_INTERVAL", "3600"))
-REFRESH_HTTP_DELAY_MS = int(os.getenv("REFRESH_HTTP_DELAY_MS", "1200"))
+MASK_REFRESH_INTERVAL = float(os.getenv("MASK_REFRESH_INTERVAL", "600"))
+REFRESH_HTTP_DELAY_MS = int(os.getenv("REFRESH_HTTP_DELAY_MS", "1800"))
 QUICK_REFETCH_AFTER_REFRESH = os.getenv("QUICK_REFETCH_AFTER_REFRESH", "true") in ("1", "true", "True")
 
 # Sanity clamp
@@ -166,18 +160,18 @@ if REFRESH_MIN_GAP < 0:
     REFRESH_MIN_GAP = 0
 
 # Debounce / optimistic
-CMD_GRACE_SECONDS = int(os.getenv("CMD_GRACE_SECONDS", "6"))
+CMD_GRACE_SECONDS = int(os.getenv("CMD_GRACE_SECONDS", "8"))
 SELECT_GRACE_SECONDS = int(os.getenv("SELECT_GRACE_SECONDS", "12"))
 
 # Command routing (anti-beep)
 SEND_STRATEGY = os.getenv("SEND_STRATEGY", "auto").strip().lower()  # auto | cloud | local | both
-DEDUP_MS = int(os.getenv("DEDUP_MS", "400"))
-STALE_SEC = int(os.getenv("STALE_SEC", "90"))
-MUTE_POLL = os.getenv("MUTE_POLL", "true") in ("1", "true", "True")
+DEDUP_MS = int(os.getenv("DEDUP_MS", "200"))
+STALE_SEC = int(os.getenv("STALE_SEC", "250"))
+MUTE_POLL = os.getenv("MUTE_POLL", "false") in ("1", "true", "True")
 PUBLISH_ONLY_CHANGED = os.getenv("PUBLISH_ONLY_CHANGED", "true") in ("1", "true", "True")
 
-PREFER_HTTP_SOC = os.getenv("PREFER_HTTP_SOC", "true") in ("1", "true", "True")
-PREFER_HTTP_TEMP = os.getenv("PREFER_HTTP_TEMP", "true") in ("1", "true", "True")
+PREFER_HTTP_SOC = os.getenv("PREFER_HTTP_SOC", "false") in ("1", "true", "True")
+PREFER_HTTP_TEMP = os.getenv("PREFER_HTTP_TEMP", "false") in ("1", "true", "True")
 HTTP_SOC_THRESHOLD = int(os.getenv("HTTP_SOC_THRESHOLD", "5"))
 HTTP_TIMEOUT = float(os.getenv("HTTP_TIMEOUT", "6.0"))
 CLEAR_RETAINED = os.getenv("CLEAR_RETAINED", "false") in ("1", "true", "True")
@@ -218,8 +212,8 @@ AC_CMD_TOPIC        = f"{HA_BASE}/{DEVICE_KEY}/set/ac_switch"
 AC_STATE_TOPIC      = f"{HA_BASE}/{DEVICE_KEY}/state/ac_switch"
 DC_CMD_TOPIC        = f"{HA_BASE}/{DEVICE_KEY}/set/dc_switch"
 DC_STATE_TOPIC      = f"{HA_BASE}/{DEVICE_KEY}/state/dc_switch"
-SCREEN_CMD_TOPIC    = f"{HA_BASE}/{DEVICE_KEY}/set/screen_switch"
-SCREEN_STATE_TOPIC  = f"{HA_BASE}/{DEVICE_KEY}/state/screen_switch"
+SCREEN_CMD_TOPIC    = f"{HA_BASE}/{DEVICE_KEY}/set/screen_sleeptime_set"
+SCREEN_STATE_TOPIC  = f"{HA_BASE}/{DEVICE_KEY}/state/screen_sleeptime_set"
 
 # Extra switches
 GRIDOUT_CMD_TOPIC   = f"{HA_BASE}/{DEVICE_KEY}/set/grid_output"
@@ -241,7 +235,7 @@ OUTPOW_STATE_TOPIC  = f"{HA_BASE}/{DEVICE_KEY}/state/output_power_set"
 AC_CFG_TOPIC        = f"{DISCOVERY_PREFIX}/switch/wonderfree_ac/config"
 DC_CFG_TOPIC        = f"{DISCOVERY_PREFIX}/switch/wonderfree_dc/config"
 LED_CFG_TOPIC       = f"{DISCOVERY_PREFIX}/switch/wonderfree_led/config"
-SCREEN_CFG_TOPIC    = f"{DISCOVERY_PREFIX}/switch/wonderfree_screen/config"
+SCREEN_CFG_TOPIC    = f"{DISCOVERY_PREFIX}/select/wonderfree_{DEVICE_KEY}_screen_sleeptime_set/config"
 GRIDOUT_CFG_TOPIC   = f"{DISCOVERY_PREFIX}/switch/wonderfree_{DEVICE_KEY}_grid_output/config"
 BEEP_CFG_TOPIC      = f"{DISCOVERY_PREFIX}/switch/wonderfree_{DEVICE_KEY}_beep/config"
 SLOWCHG_CFG_TOPIC   = f"{DISCOVERY_PREFIX}/switch/wonderfree_{DEVICE_KEY}_slowcharge/config"
@@ -301,6 +295,14 @@ MODE_HEX_BY_LABEL = {
     "Power Reserve Priority": "AA AA 00 09 76 02 84 00 13 00 DA 00 02",
 }
 MODE_LABEL_BY_VAL = {0: "PPS", 1: "Micro-Inverter", 2: "Power Reserve Priority",}
+
+SCREEN_TIMEOUT_LABEL_BY_VAL = {0: "Never", 3: "3 Mins", 10: "10 Mins"}
+SCREEN_TIMEOUT_VAL_BY_LABEL = {v: k for k, v in SCREEN_TIMEOUT_LABEL_BY_VAL.items()}
+SCREEN_TIMEOUT_HEX_BY_LABEL = {
+    "Never":   SCREEN_ON_HEX,
+    "3 Mins":  "AA AA 00 09 41 00 FA 00 13 01 32 00 03",
+    "10 Mins": SCREEN_OFF_HEX,
+}
 
 DEVICE_STATUS_LABEL = {
     0: "Standby",

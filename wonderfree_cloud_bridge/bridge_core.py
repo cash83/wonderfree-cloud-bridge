@@ -40,13 +40,23 @@ class Bridge:
         self.last_publish_ts = 0
         self._last_published = {}
 
+        # Availability state
+        self._pending_offline_since = 0.0
+        self._device_force_offline = False
+        self._onl_declared_offline = False
+        self._last_ack_ts = 0.0
+        self._cloud_online_status = None
+        self._last_cloud_status_check = 0.0
+        self._device_status_last_detail = {}
+
     def _on_local_connect(self, client, userdata, flags, rc, properties=None):
         if rc != 0:
             log.error(f"LOCAL connect failed rc={rc}")
             return
         log.info(f"LOCAL connected {LOCAL_HOST}:{LOCAL_PORT}")
         client.will_set(AVAIL_TOPIC, AVAIL_PAYLOAD_OFF, retain=True)
-        client.publish(AVAIL_TOPIC, AVAIL_PAYLOAD_ON, qos=0, retain=True)
+        # Non pubblicare subito ONLINE al connect locale: aspetta la prima valutazione reale
+        # (cloud status / watchdog) per evitare retained online errati allo startup.
 
         client.subscribe(f"{HA_BASE}/{DEVICE_KEY}/set/#", qos=0)
         client.subscribe(f"{LOCAL_OUT_PREFIX}#", qos=0)
@@ -70,8 +80,10 @@ class Bridge:
         client.publish(DC_STATE_TOPIC, b"OFF", qos=0, retain=True)
         publish_cfg(LED_CFG_TOPIC, {"name":"LED","uniq_id":f"wf_led_{DEVICE_KEY}","cmd_t":LED_CMD_TOPIC,"stat_t":LED_STATE_TOPIC,"pl_on":"ON","pl_off":"OFF","icon":"mdi:flashlight","device":base_dev})
         client.publish(LED_STATE_TOPIC, b"OFF", qos=0, retain=True)
-        publish_cfg(SCREEN_CFG_TOPIC, {"name":"Screen","uniq_id":f"wf_screen_{DEVICE_KEY}","cmd_t":SCREEN_CMD_TOPIC,"stat_t":SCREEN_STATE_TOPIC,"pl_on":"ON","pl_off":"OFF","icon":"mdi:monitor","device":base_dev})
-        client.publish(SCREEN_STATE_TOPIC, b"OFF", qos=0, retain=True)
+        publish_cfg(SCREEN_CFG_TOPIC, {"name":"Screen Off Time","uniq_id":f"wf_screen_timeout_{DEVICE_KEY}","cmd_t":SCREEN_CMD_TOPIC,"stat_t":SCREEN_STATE_TOPIC,"options":["Never","3 Mins","10 Mins"],"icon":"mdi:monitor","device":base_dev})
+        # Non pubblicare un default finto per lo screen timeout: aspetta lo stato reale dal cloud.
+        # Pulisci anche la vecchia discovery come switch, se ancora presente da versioni precedenti.
+        client.publish(f"{DISCOVERY_PREFIX}/switch/wonderfree_screen/config", b"", qos=0, retain=True)
         publish_cfg(GRIDOUT_CFG_TOPIC, {"name":"On-grid Output Switch","uniq_id":f"wf_grid_output_{DEVICE_KEY}","cmd_t":GRIDOUT_CMD_TOPIC,"stat_t":GRIDOUT_STATE_TOPIC,"pl_on":"ON","pl_off":"OFF","icon":"mdi:transmission-tower-export","device":base_dev})
         client.publish(GRIDOUT_STATE_TOPIC, b"OFF", qos=0, retain=True)
         publish_cfg(BEEP_CFG_TOPIC, {"name":"Buzzer","uniq_id":f"wf_beep_{DEVICE_KEY}","cmd_t":BEEP_CMD_TOPIC,"stat_t":BEEP_STATE_TOPIC,"pl_on":"ON","pl_off":"OFF","icon":"mdi:volume-high","device":base_dev})
@@ -287,7 +299,7 @@ class Bridge:
             # misc
             "signal_strength", "fault_code", "device_status", "updated_at",
             # switch/select states
-            "ac_switch", "dc_switch", "offscreen_switch",
+            "ac_switch", "dc_switch", "screen_sleeptime_set", "screen_sleeptime_set_label",
             "grid_output", "ac_charging_limit", "beep_setting",
             "led_status", "mode_set", "output_power_set",
             # bridge health

@@ -32,6 +32,7 @@ from wf_config import (
     AC_ON_HEX, AC_OFF_HEX,
     DC_ON_HEX, DC_OFF_HEX,
     SCREEN_ON_HEX, SCREEN_OFF_HEX,
+    SCREEN_TIMEOUT_HEX_BY_LABEL,
     GRID_ON_HEX, GRID_OFF_HEX,
     BEEP_ON_HEX, BEEP_OFF_HEX,
     SLOW_ON_HEX, SLOW_OFF_HEX,
@@ -58,8 +59,12 @@ def attach(Bridge):
             self._send_cmd(DC_ON_HEX if on else DC_OFF_HEX, "dc_switch", DC_STATE_TOPIC, on, CMD_GRACE_SECONDS)
             return
         if t == SCREEN_CMD_TOPIC:
-            on = p.upper() == "ON"
-            self._send_cmd(SCREEN_ON_HEX if on else SCREEN_OFF_HEX, "offscreen_switch", SCREEN_STATE_TOPIC, on, CMD_GRACE_SECONDS)
+            label = p
+            hx = SCREEN_TIMEOUT_HEX_BY_LABEL.get(label)
+            if hx:
+                self._send_select(hx, "screen_sleeptime_set", SCREEN_STATE_TOPIC, label, SELECT_GRACE_SECONDS)
+            else:
+                log.warning(f"[CMD] screen_sleeptime_set invalid payload: {p}")
             return
         if t == GRIDOUT_CMD_TOPIC:
             on = p.upper() == "ON"
