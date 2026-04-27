@@ -45,6 +45,58 @@ except Exception:
 
 
 def attach(Bridge):
+    def _schedule_quick_refetch(self, reason: str = "bus"):
+        """Fetch stato HTTP quasi subito quando il cloud manda BUS realtime.
+
+        I frame /bus arrivano velocemente anche quando il cambio parte dall'app
+        ufficiale, ma non sono JSON facili da pubblicare direttamente. Usiamoli
+        come trigger per leggere subito gli attributi realtime, con throttle per
+        evitare raffiche HTTP durante i burst.
+        """
+        try:
+            now = time.time()
+            if now < float(getattr(self, "_quick_refetch_next", 0.0) or 0.0):
+                return
+            if getattr(self, "_quick_refetch_running", False):
+                return
+            self._quick_refetch_next = now + 10.0
+            self._quick_refetch_running = True
+
+            def _worker():
+                try:
+                    time.sleep(0.8)
+                    sess = requests.Session()
+                    for k, v in APP_HEADERS.items():
+                        sess.headers[k] = v
+                    tok = self.token_mgr.ensure()
+                    sess.headers["Authorization"] = normalize_bearer(tok)
+
+                    kv, dev_update, dev_data = self._fetch_attrs_raw(sess)
+                    if kv and self.local:
+                        st = self._normalize_state(kv, dev_update)
+                        try:
+                            if dev_data:
+                                sig = _num(dev_data.get("signalStrength"))
+                                if sig is not None:
+                                    st["signal_strength"] = sig
+                        except Exception:
+                            pass
+                        self._publish_state(st, kv, debug=True)
+                        self._reconcile_switch_states(st)
+                        log.debug(f"[QUICK-REFETCH] reason={reason} published")
+                    else:
+                        log.debug(f"[QUICK-REFETCH] reason={reason} no data")
+                except Exception as e:
+                    log.debug(f"[QUICK-REFETCH] reason={reason} failed: {e}")
+                finally:
+                    self._quick_refetch_running = False
+
+            threading.Thread(target=_worker, daemon=True).start()
+        except Exception:
+            self._quick_refetch_running = False
+
+    Bridge._schedule_quick_refetch = _schedule_quick_refetch
+
     def start(self):
         self.token_mgr.ensure()
         self._connect_local()
@@ -52,6 +104,13 @@ def attach(Bridge):
         if CLEAR_RETAINED and self.local:
             log.debug('[INIT] Clearing retained under state/* and JSON topics')
             self._clear_retained()
+            # Dopo la pulizia dei retained, ripubblica subito la discovery.
+            # Senza questo passaggio Home Assistant puo' rimuovere alcune entita'
+            # fino al successivo reconnect MQTT.
+            try:
+                self._on_local_connect(self.local, None, None, 0)
+            except Exception as e:
+                log.warning(f"[INIT] republish discovery after clear_retained failed: {e}")
 
         self._connect_remote()
 

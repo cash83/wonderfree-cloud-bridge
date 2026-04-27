@@ -75,25 +75,17 @@ class Bridge:
             client.publish(topic, json.dumps(payload).encode(), qos=0, retain=True)
 
         publish_cfg(AC_CFG_TOPIC, {"name":"AC Output","uniq_id":f"wf_ac_{DEVICE_KEY}","cmd_t":AC_CMD_TOPIC,"stat_t":AC_STATE_TOPIC,"pl_on":"ON","pl_off":"OFF","icon":"mdi:power-plug-outline","device":base_dev})
-        client.publish(AC_STATE_TOPIC, b"OFF", qos=0, retain=True)
         publish_cfg(DC_CFG_TOPIC, {"name":"DC Output","uniq_id":f"wf_dc_{DEVICE_KEY}","cmd_t":DC_CMD_TOPIC,"stat_t":DC_STATE_TOPIC,"pl_on":"ON","pl_off":"OFF","icon":"mdi:current-dc","device":base_dev})
-        client.publish(DC_STATE_TOPIC, b"OFF", qos=0, retain=True)
         publish_cfg(LED_CFG_TOPIC, {"name":"LED","uniq_id":f"wf_led_{DEVICE_KEY}","cmd_t":LED_CMD_TOPIC,"stat_t":LED_STATE_TOPIC,"pl_on":"ON","pl_off":"OFF","icon":"mdi:flashlight","device":base_dev})
-        client.publish(LED_STATE_TOPIC, b"OFF", qos=0, retain=True)
         publish_cfg(SCREEN_CFG_TOPIC, {"name":"Screen Off Time","uniq_id":f"wf_screen_timeout_{DEVICE_KEY}","cmd_t":SCREEN_CMD_TOPIC,"stat_t":SCREEN_STATE_TOPIC,"options":["Never","3 Mins","10 Mins"],"icon":"mdi:monitor","device":base_dev})
         # Non pubblicare un default finto per lo screen timeout: aspetta lo stato reale dal cloud.
         # Pulisci anche la vecchia discovery come switch, se ancora presente da versioni precedenti.
         client.publish(f"{DISCOVERY_PREFIX}/switch/wonderfree_screen/config", b"", qos=0, retain=True)
         publish_cfg(GRIDOUT_CFG_TOPIC, {"name":"On-grid Output Switch","uniq_id":f"wf_grid_output_{DEVICE_KEY}","cmd_t":GRIDOUT_CMD_TOPIC,"stat_t":GRIDOUT_STATE_TOPIC,"pl_on":"ON","pl_off":"OFF","icon":"mdi:transmission-tower-export","device":base_dev})
-        client.publish(GRIDOUT_STATE_TOPIC, b"OFF", qos=0, retain=True)
         publish_cfg(BEEP_CFG_TOPIC, {"name":"Buzzer","uniq_id":f"wf_beep_{DEVICE_KEY}","cmd_t":BEEP_CMD_TOPIC,"stat_t":BEEP_STATE_TOPIC,"pl_on":"ON","pl_off":"OFF","icon":"mdi:volume-high","device":base_dev})
-        client.publish(BEEP_STATE_TOPIC, b"OFF", qos=0, retain=True)
         publish_cfg(SLOWCHG_CFG_TOPIC, {"name":"Silent Charge","uniq_id":f"wf_slowchg_{DEVICE_KEY}","cmd_t":SLOWCHG_CMD_TOPIC,"stat_t":SLOWCHG_STATE_TOPIC,"pl_on":"ON","pl_off":"OFF","icon":"mdi:tortoise","device":base_dev})
-        client.publish(SLOWCHG_STATE_TOPIC, b"OFF", qos=0, retain=True)
         publish_cfg(MODE_CFG_TOPIC, {"name":"Working Mode","uniq_id":f"wf_mode_{DEVICE_KEY}","cmd_t":MODE_CMD_TOPIC,"stat_t":MODE_STATE_TOPIC,"options":["PPS","Micro-Inverter","Power Reserve Priority"],"icon":"mdi:transmission-tower-import","device":base_dev})
-        client.publish(MODE_STATE_TOPIC, b"PPS", qos=0, retain=True)
         publish_cfg(OUTPOW_CFG_TOPIC, {"name":"On-grid Power Setting","uniq_id":f"wf_output_power_{DEVICE_KEY}","cmd_t":OUTPOW_CMD_TOPIC,"stat_t":OUTPOW_STATE_TOPIC,"min": OUTPUT_MIN, "max": OUTPUT_MAX, "step": OUTPUT_STEP,"unit_of_measurement":"W","device_class":"power","icon":"mdi:lightning-bolt","device": base_dev})
-        client.publish(OUTPOW_STATE_TOPIC, str(OUTPUT_MIN).encode(), qos=0, retain=True)
 
         def disc_sensor(obj_id, name, unit=None, device_class=None, state_class=None):
             uniq = f"wonderfree_{DEVICE_KEY}_{obj_id}"
@@ -265,6 +257,7 @@ class Bridge:
 
         # ── 2. Availability ──────────────────────────────────────────────
         _pub(AVAIL_TOPIC)
+        _pub(f"{HA_BASE}/availability")
 
         # ── 3. Tutti i topic state/* attualmente noti ─────────────────────
         _state_keys = [
@@ -352,7 +345,7 @@ class Bridge:
             uniq = f"wonderfree_{DEVICE_KEY}_{sid}"
             _pub(f"{DISCOVERY_PREFIX}/sensor/{uniq}/config")
 
-        # Legacy switch topics senza device_key (alcune versioni vecchie)
+        # Legacy discovery topics senza device_key (alcune versioni vecchie)
         for slug in ("wonderfree_ac", "wonderfree_dc", "wonderfree_led",
                      "wonderfree_screen", "wonderfree_mode"):
             _pub(f"{DISCOVERY_PREFIX}/switch/{slug}/config")

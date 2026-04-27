@@ -153,6 +153,10 @@ def attach(Bridge):
                 self._onl_declared_offline = False  # /bus arriva solo da device realmente attivo
                 self._last_ack_ts = now
                 log.debug(f"[REMOTE] BUS payload len={len(payload)} hex={payload[:32].hex()}")
+                try:
+                    self._schedule_quick_refetch("bus")
+                except Exception:
+                    pass
 
             # --- PARSING /onl_: notifica online/offline dal cloud con debounce ---
             if topic.endswith("/onl_"):

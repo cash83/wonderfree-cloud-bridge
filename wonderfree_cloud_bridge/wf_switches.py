@@ -120,6 +120,7 @@ def attach(Bridge):
 
         remote_ok = self.remote is not None
         strat = SEND_STRATEGY
+        log.info(f"[CMD] route={strat} remote_ok={remote_ok} topic={BUS_TOPIC} hex={payload.hex()}")
 
         if strat == "cloud":
             if remote_ok:

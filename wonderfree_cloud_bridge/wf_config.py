@@ -193,7 +193,7 @@ APP_HEADERS = {
 # ... il resto del codice rimane uguale ...
 
 # Availability
-AVAIL_TOPIC = os.getenv("AVAIL_TOPIC", f"{HA_BASE}/availability")
+AVAIL_TOPIC = os.getenv("AVAIL_TOPIC", f"{HA_BASE}/{DEVICE_KEY}/availability")
 AVAIL_PAYLOAD_ON = "online"
 AVAIL_PAYLOAD_OFF = "offline"
 
@@ -232,14 +232,14 @@ OUTPOW_CMD_TOPIC    = f"{HA_BASE}/{DEVICE_KEY}/set/output_power_set"
 OUTPOW_STATE_TOPIC  = f"{HA_BASE}/{DEVICE_KEY}/state/output_power_set"
 
 # Discovery topics
-AC_CFG_TOPIC        = f"{DISCOVERY_PREFIX}/switch/wonderfree_ac/config"
-DC_CFG_TOPIC        = f"{DISCOVERY_PREFIX}/switch/wonderfree_dc/config"
-LED_CFG_TOPIC       = f"{DISCOVERY_PREFIX}/switch/wonderfree_led/config"
+AC_CFG_TOPIC        = f"{DISCOVERY_PREFIX}/switch/wonderfree_{DEVICE_KEY}_ac/config"
+DC_CFG_TOPIC        = f"{DISCOVERY_PREFIX}/switch/wonderfree_{DEVICE_KEY}_dc/config"
+LED_CFG_TOPIC       = f"{DISCOVERY_PREFIX}/switch/wonderfree_{DEVICE_KEY}_led/config"
 SCREEN_CFG_TOPIC    = f"{DISCOVERY_PREFIX}/select/wonderfree_{DEVICE_KEY}_screen_sleeptime_set/config"
 GRIDOUT_CFG_TOPIC   = f"{DISCOVERY_PREFIX}/switch/wonderfree_{DEVICE_KEY}_grid_output/config"
 BEEP_CFG_TOPIC      = f"{DISCOVERY_PREFIX}/switch/wonderfree_{DEVICE_KEY}_beep/config"
 SLOWCHG_CFG_TOPIC   = f"{DISCOVERY_PREFIX}/switch/wonderfree_{DEVICE_KEY}_slowcharge/config"
-MODE_CFG_TOPIC      = f"{DISCOVERY_PREFIX}/select/wonderfree_mode/config"
+MODE_CFG_TOPIC      = f"{DISCOVERY_PREFIX}/select/wonderfree_{DEVICE_KEY}_mode/config"
 OUTPOW_CFG_TOPIC    = f"{DISCOVERY_PREFIX}/number/wonderfree_{DEVICE_KEY}_output_power_set/config"
 
 # Stato sensori
