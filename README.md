@@ -214,6 +214,22 @@ Quando condividi log o screenshot per supporto:
 
 ---
 
+## 📋 Changelog
+
+### v1.7.2
+- **Fix multi-piattaforma**: corretto il prefisso del `client_id` MQTT che causava `rc=2` (Connection Refused) quando si usava la piattaforma **Wonderfree Europe** (`wonderfree` / `europe`). Il prefisso viene ora derivato dal dominio della piattaforma (es. `E` per Europa, `U` per Nord America) invece di essere sempre forzato a `U`
+- **Cache intelligente**: la cache `/data/discovered.json` viene invalidata automaticamente quando si cambia piattaforma o quando il prefisso del `client_id` non corrisponde alla piattaforma attiva — non è più necessario cancellare la cache manualmente quando si cambia da `landecia` a `wonderfree` o viceversa
+- **Messaggi di errore migliorati**: `rc=2` ora mostra un messaggio chiaro con la causa e la soluzione invece del generico "network protocol error"
+- **rc=5 separato da rc=2**: il token scaduto (`rc=5`) usa il retry automatico, mentre la configurazione errata (`rc=2`) si ferma subito con un messaggio esplicativo
+
+### v1.7.1 e precedenti
+- Auto-discovery `device_key` e `product_key`
+- Supporto multi-piattaforma: Wonderfree, Landbook, Landecia, Nord America, Europa, Cina
+- MQTT Discovery automatico in Home Assistant
+- Token refresh automatico
+
+---
+
 ## 📄 Licenza
 
 MIT — vedi [LICENSE](LICENSE)

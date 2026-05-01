@@ -78,10 +78,11 @@ def attach(Bridge):
             except Exception as e:
                 log.warning(f"[REMOTE] subscribe failed: {e}")
 
-        elif rc in (2, 5):
-            log.warning(f"[REMOTE] rc={rc} ({mqtt.error_string(rc)}) → router reboot/IP change detected")
+        elif rc == 5:
+            # rc=5 = Not Authorized → token scaduto, riprova login
+            log.warning(f"[REMOTE] rc=5 (Not Authorized) → token scaduto, riprovo login...")
             for attempt in range(1, 11):
-                log.info(f"[AUTH] retry login after rc={rc} (attempt {attempt})... waiting 30s")
+                log.info(f"[AUTH] retry login after rc=5 (attempt {attempt})... waiting 30s")
                 time.sleep(30)
                 try:
                     self.token_mgr.login()
@@ -91,6 +92,29 @@ def attach(Bridge):
                 except Exception as e:
                     log.warning(f"[REMOTE] relogin attempt {attempt} failed: {e}")
             log.error("[REMOTE] too many relogin attempts, stopping retries")
+
+        elif rc == 2:
+            # rc=2 = Connection Refused: Identifier Rejected
+            # NON è un problema di token: il broker rifiuta il client ID o le credenziali.
+            # Causa più comune: piattaforma sbagliata (es. account Nord America → broker Europa).
+            log.error(
+                "[REMOTE] rc=2 (Connection Refused: Identifier Rejected)\n"
+                "  Il broker MQTT cloud ha rifiutato la connessione.\n"
+                "  Causa più probabile: PIATTAFORMA SBAGLIATA nel campo 'app'.\n"
+                "  - Account Landecia/Landbook → usa 'landecia' o 'landbook'\n"
+                "  - Account Wonderfree Europe → usa 'wonderfree' o 'europe'\n"
+                "  Ritento una volta dopo nuovo login (poi mi fermo)..."
+            )
+            time.sleep(30)
+            try:
+                self.token_mgr.login()
+                log.info("[REMOTE] new token OK, reconnecting after rc=2...")
+                self._connect_remote()
+            except Exception as e:
+                log.error(
+                    f"[REMOTE] rc=2: relogin fallito ({e}).\n"
+                    "  Verifica il campo 'app' nella configurazione dell'add-on."
+                )
 
         else:
             log.warning(f"REMOTE connect failed rc={rc} ({mqtt.error_string(rc)}) – retry in 30s")
@@ -289,6 +313,7 @@ def attach(Bridge):
         jwt = normalize_bearer(tok)
 
         client_id = ACCEL_CLIENT or f"qu_{uuid.uuid4().hex[:6].upper()}_{int(time.time()*1000)}"
+        log.info(f"[REMOTE] MQTT client_id={client_id} len={len(client_id)}")
 
         cli = mqtt.Client(
             client_id=client_id,

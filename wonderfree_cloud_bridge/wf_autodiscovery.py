@@ -172,7 +172,7 @@ def _get(env_key: str, opts: dict, opt_key: str = "") -> str:
 
 # ── Cache ─────────────────────────────────────────────────────────────────────
 
-def _load_cache() -> Optional[dict]:
+def _load_cache(current_platform: str = "") -> Optional[dict]:
     try:
         if not os.path.exists(_CACHE_PATH):
             return None
@@ -181,15 +181,41 @@ def _load_cache() -> Optional[dict]:
         if int(time.time()) - int(d.get("_ts", 0)) > _CACHE_TTL:
             log.info("[AUTODISCOVERY] Cache scaduta, rifaccio discovery")
             return None
+        cached_platform = d.get("_platform", "")
+        if current_platform and cached_platform and cached_platform != current_platform:
+            log.warning(
+                f"[AUTODISCOVERY] Piattaforma cambiata ({cached_platform} → {current_platform}), "
+                "cache invalidata — riavvio discovery."
+            )
+            return None
+        # Valida che il prefisso dell'accel_client corrisponda al dominio della piattaforma.
+        # Esempio: piattaforma "wonderfree" (dominio E.SP...) richiede qu_E..., non qu_U... o qu_UE...
+        if current_platform:
+            plat_cfg = _PLATFORMS.get(current_platform, {})
+            plat_domain = plat_cfg.get("wf_domain", "")
+            if plat_domain and plat_domain[0].isalpha():
+                expected_prefix = plat_domain[0].upper()
+                cached_accel = d.get("accel_client", "")
+                # Estrae il prefisso del client ID: "qu_E82519_" → 'E', "qu_UE82519_" → 'U'
+                if cached_accel.startswith("qu_") and len(cached_accel) > 3 and cached_accel[3].isalpha():
+                    actual_prefix = cached_accel[3]
+                    if actual_prefix != expected_prefix:
+                        log.warning(
+                            f"[AUTODISCOVERY] Cache accel_client prefix '{actual_prefix}' != "
+                            f"atteso '{expected_prefix}' (dominio {plat_domain}) — cache invalidata."
+                        )
+                        return None
         log.info("[AUTODISCOVERY] Valori caricati dalla cache")
         return d
     except Exception:
         return None
 
 
-def _save_cache(data: dict) -> None:
+def _save_cache(data: dict, platform: str = "") -> None:
     try:
         data["_ts"] = int(time.time())
+        if platform:
+            data["_platform"] = platform
         dirn = os.path.dirname(_CACHE_PATH)
         if dirn:
             os.makedirs(dirn, exist_ok=True)
@@ -229,9 +255,12 @@ def _login(base_url: str, login_path: str, secret_suffix: str,
         j = r.json()
         if j.get("code") == 200:
             return j
-        log.debug(f"[AUTODISCOVERY] Login code={j.get('code')} msg={j.get('msg','')}")
+        log.warning(
+            f"[AUTODISCOVERY] Login rifiutato dal server: code={j.get('code')} msg={j.get('msg', '')} "
+            f"(url={base_url}, domain={domain})"
+        )
     except Exception as e:
-        log.debug(f"[AUTODISCOVERY] Login exception: {e}")
+        log.warning(f"[AUTODISCOVERY] Login exception: {e}")
     return None
 
 
@@ -445,7 +474,7 @@ def setup(force: bool = False) -> None:
 
     # ── Carica dalla cache ────────────────────────────────────────────────
     if not force:
-        cached = _load_cache()
+        cached = _load_cache(platform)
         if cached:
             _apply_discovered(cached)
             return
@@ -463,8 +492,19 @@ def setup(force: bool = False) -> None:
     log.info(f"[AUTODISCOVERY] Login → {base_url}  domain={domain}")
     resp = _login(base_url, login_path, secret_suffix, email, password, domain, headers)
     if not resp:
+        hint = ""
+        if platform in ("wonderfree", "europe"):
+            hint = (
+                "\n  → Stai usando la piattaforma EUROPEA (acceleronix.io)."
+                "\n  → Se il tuo dispositivo è Landecia/Landbook usa 'landecia' o 'landbook' nel campo 'app'."
+            )
+        elif platform in ("landbook", "landecia", "northamerica"):
+            hint = (
+                "\n  → Stai usando la piattaforma NORD AMERICA (netprisma.us/landecia.com)."
+                "\n  → Se il tuo dispositivo è Wonderfree Europe usa 'wonderfree' o 'europe' nel campo 'app'."
+            )
         raise SystemExit(
-            "[AUTODISCOVERY] Login fallito.\n"
+            f"[AUTODISCOVERY] Login fallito su {base_url} (domain={domain}).{hint}\n"
             "Controlla: wf_email, wf_password, app (o base_url/secret_suffix/wf_domain)"
         )
 
@@ -483,10 +523,20 @@ def setup(force: bool = False) -> None:
     # ── accel_client ──────────────────────────────────────────────────────
     if not accel_cli:
         if user_id:
-            uid_str   = str(user_id)
-            prefix    = uid_str if uid_str.startswith("U") else f"U{uid_str}"
+            uid_str = str(user_id)
+            # Il prefisso dell'accel_client segue il prefisso del wf_domain:
+            #   E.SP.4294967410 → E  (Europe/Acceleronix)
+            #   U.SP.8589934603 → U  (North America/Netprisma)
+            #   C.DM.5903.1     → C  (China/Quectel)
+            # Se l'ID ha già un prefisso letterale, lo preserva.
+            # Se è numerico, aggiunge il prefisso derivato dal dominio.
+            if uid_str and uid_str[0].isdigit():
+                domain_prefix = domain[0].upper() if domain and domain[0].isalpha() else "U"
+                prefix = f"{domain_prefix}{uid_str}"
+            else:
+                prefix = uid_str
             accel_cli = f"qu_{prefix}_"
-            log.info(f"[AUTODISCOVERY] accel_client = {accel_cli}")
+            log.info(f"[AUTODISCOVERY] accel_client = {accel_cli}  (uid_raw={uid_str}, domain_prefix={domain[0] if domain else '?'})")
         else:
             raise SystemExit(
                 "[AUTODISCOVERY] userId non trovato.\n"
@@ -526,6 +576,6 @@ def setup(force: bool = False) -> None:
         "product_key":  product_key,
         "accel_client": accel_cli,
     }
-    _save_cache(discovered)
+    _save_cache(discovered, platform)
     _apply_discovered(discovered)
     log.info("[AUTODISCOVERY] Discovery completata.")
