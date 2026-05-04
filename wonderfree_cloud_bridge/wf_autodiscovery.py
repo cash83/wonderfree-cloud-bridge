@@ -26,6 +26,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 from Crypto.Cipher import AES
+from wf_privacy import mask_value
 
 log = logging.getLogger("wf-autodiscovery")
 
@@ -120,6 +121,29 @@ _PLATFORMS: Dict[str, Dict[str, str]] = {
 }
 
 # ── Crypto inline (no import da wf_config/wf_crypto) ─────────────────────────
+
+def _load_platforms_from_file(defaults: Dict[str, Dict[str, str]]) -> Dict[str, Dict[str, str]]:
+    path = os.path.join(os.path.dirname(__file__), "platforms.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f) or {}
+        if not isinstance(data, dict):
+            raise ValueError("platforms.json non contiene un oggetto JSON")
+        required = {"base_url", "accel_url", "wf_domain", "secret_suffix", "realtime_attrs_url"}
+        for name, cfg in data.items():
+            if not isinstance(cfg, dict):
+                raise ValueError(f"config piattaforma non valida: {name}")
+            missing = sorted(required - set(cfg))
+            if missing:
+                raise ValueError(f"config piattaforma incompleta: {name} ({', '.join(missing)})")
+        return {str(k): {str(ck): str(cv) for ck, cv in v.items()} for k, v in data.items()}
+    except Exception as e:
+        log.warning(f"[AUTODISCOVERY] platforms.json non caricato ({e}); uso fallback interno")
+        return defaults
+
+
+_PLATFORMS = _load_platforms_from_file(_PLATFORMS)
+
 
 def _rand(n: int = 16) -> str:
     a = string.ascii_letters + string.digits
@@ -400,7 +424,7 @@ def _apply_discovered(data: dict) -> None:
         if v:
             _setenv(env_k, v)
             if os.getenv(env_k) == v:
-                log.info(f"[AUTODISCOVERY] {env_k} = {v}")
+                log.info(f"[AUTODISCOVERY] {env_k} = {mask_value(v)}")
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -467,6 +491,10 @@ def setup(force: bool = False) -> None:
     device_key  = _get("DEVICE_KEY",   opts, "device_key")
     product_key = _get("PRODUCT_KEY",  opts, "product_key")
     accel_cli   = _get("ACCEL_CLIENT", opts, "accel_client")
+    preferred_device_key = (
+        _get("WF_DEVICE_KEY", opts, "wf_device_key")
+        or _get("DEVICE_KEY", opts, "device_key")
+    )
 
     if domain and device_key and product_key and accel_cli:
         log.info("[AUTODISCOVERY] Config completo — skip discovery.")
@@ -536,7 +564,7 @@ def setup(force: bool = False) -> None:
             else:
                 prefix = uid_str
             accel_cli = f"qu_{prefix}_"
-            log.info(f"[AUTODISCOVERY] accel_client = {accel_cli}  (uid_raw={uid_str}, domain_prefix={domain[0] if domain else '?'})")
+            log.info(f"[AUTODISCOVERY] accel_client = {mask_value(accel_cli)}  (domain_prefix={domain[0] if domain else '?'})")
         else:
             raise SystemExit(
                 "[AUTODISCOVERY] userId non trovato.\n"
@@ -555,19 +583,34 @@ def setup(force: bool = False) -> None:
             )
 
         if len(devices) > 1:
-            log.info(f"[AUTODISCOVERY] {len(devices)} dispositivi — uso il primo:")
+            log.info(f"[AUTODISCOVERY] {len(devices)} dispositivi trovati:")
             for i, d in enumerate(devices):
                 dk, pk = _parse_device(d)
-                log.info(f"  [{i}] dk={dk}  pk={pk}  name={d.get('deviceName','?')}")
+                log.info(f"  [{i}] dk={mask_value(dk)}  pk={mask_value(pk)}  name={d.get('deviceName','?')}")
 
-        dk, pk = _parse_device(devices[0])
+        selected_device = devices[0]
+        if preferred_device_key:
+            preferred = str(preferred_device_key).strip()
+            for d in devices:
+                dk, _pk = _parse_device(d)
+                if str(dk).strip() == preferred:
+                    selected_device = d
+                    log.info(f"[AUTODISCOVERY] Uso dispositivo configurato: {mask_value(dk)}")
+                    break
+            else:
+                raise SystemExit(
+                    "[AUTODISCOVERY] device_key configurato non trovato tra i dispositivi dell'account.\n"
+                    "Controlla il valore oppure lascialo vuoto per usare il primo dispositivo."
+                )
+
+        dk, pk = _parse_device(selected_device)
         if not dk or not pk:
             raise SystemExit(
-                f"[AUTODISCOVERY] Struttura dispositivo inattesa: {devices[0]}\n"
+                f"[AUTODISCOVERY] Struttura dispositivo inattesa: {selected_device}\n"
                 "Aggiungi device_key e product_key nel config manualmente."
             )
         device_key, product_key = dk, pk
-        log.info(f"[AUTODISCOVERY] device_key={device_key}  product_key={product_key}")
+        log.info(f"[AUTODISCOVERY] device_key={mask_value(device_key)}  product_key={mask_value(product_key)}")
 
     # ── Salva e applica ───────────────────────────────────────────────────
     discovered = {

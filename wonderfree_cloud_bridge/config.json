@@ -12,6 +12,7 @@
     "wf_email": "",
     "wf_password": "",
     "app": "wonderfree",
+    "wf_device_key": "",
 
     "mqtt_host": "core-mosquitto",
     "mqtt_port": 1883,
@@ -58,6 +59,7 @@
     "wf_email": "str",
     "wf_password": "password",
     "app": "list(wonderfree|landbook|landecia|northamerica|europe|china|europe-uat|northamerica-uat|china-uat)",
+    "wf_device_key": "str?",
 
     "mqtt_host": "str",
     "mqtt_port": "int",
@@ -76,7 +78,7 @@
     "prefer_http_soc": "bool",
     "prefer_http_temp": "bool",
     "http_soc_threshold": "int",
-    "http_timeout": "int",
+    "http_timeout": "float",
     "clear_retained": "bool",
     "observer_only": "bool",
 

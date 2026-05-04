@@ -2,7 +2,11 @@
 set -e
 
 OPTS="/data/options.json"
-echo "[INFO] Wonderfree Cloud Bridge starting... (addon v${WF_CLOUD_ADDON_VERSION:-unknown})"
+ADDON_VERSION="${WF_CLOUD_ADDON_VERSION:-}"
+if [ -z "$ADDON_VERSION" ] && [ -f "/app/config.json" ]; then
+  ADDON_VERSION="$(jq -r '.version // "unknown"' /app/config.json)"
+fi
+echo "[INFO] Wonderfree Cloud Bridge starting... (addon v${ADDON_VERSION:-unknown})"
 echo "[INFO] Loading options..."
 
 # =============================================================
@@ -10,6 +14,7 @@ echo "[INFO] Loading options..."
 # =============================================================
 WF_EMAIL=$(jq -r '.wf_email // ""' "$OPTS")
 WF_PASSWORD=$(jq -r '.wf_password // ""' "$OPTS")
+WF_DEVICE_KEY=$(jq -r '.wf_device_key // ""' "$OPTS")
 
 if [ -z "$WF_EMAIL" ];    then echo "[ERRORE] 'wf_email' mancante";    exit 1; fi
 if [ -z "$WF_PASSWORD" ]; then echo "[ERRORE] 'wf_password' mancante"; exit 1; fi
@@ -71,7 +76,7 @@ OUTPUT_POWER_STEP=$(jq -r '.output_power_step // 10' "$OPTS")
 # =============================================================
 # EXPORT
 # =============================================================
-export WF_EMAIL WF_PASSWORD PLATFORM
+export WF_EMAIL WF_PASSWORD WF_DEVICE_KEY PLATFORM
 export LOCAL_HOST="$MQTT_HOST" LOCAL_PORT="$MQTT_PORT" LOCAL_USER="$MQTT_USER" LOCAL_PASS="$MQTT_PASS"
 export HA_BASE HA_DISCOVERY="$DISCOVERY_PREFIX" LOG_LEVEL
 export POLL_MIN POLL_MAX REFRESH_MIN REFRESH_MAX REFRESH_MIN_GAP

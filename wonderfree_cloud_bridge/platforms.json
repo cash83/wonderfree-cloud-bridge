@@ -1,0 +1,65 @@
+{
+  "wonderfree": {
+    "base_url": "https://iot-api.acceleronix.io",
+    "accel_url": "wss://iot-south.acceleronix.io:8443/ws/v2",
+    "wf_domain": "E.SP.4294967410",
+    "secret_suffix": "3aRNUwWahjyANa7WfBK2wCCkxCexB6nXxKJwXxfePvzf",
+    "realtime_attrs_url": "https://iot-api.acceleronix.io/v2/binding/enduserapi/getDeviceBusinessAttributes"
+  },
+  "landbook": {
+    "base_url": "https://iot-api.netprisma.us",
+    "accel_url": "wss://iot-south.netprisma.us:8443/ws/v2",
+    "wf_domain": "U.SP.8589934603",
+    "secret_suffix": "pUTp5goB1bLinprRQMmK3EPiiuPiGrJtKUNptWRXVmP",
+    "realtime_attrs_url": "https://iot-api.netprisma.us/v2/binding/enduserapi/getDeviceBusinessAttributes"
+  },
+  "landecia": {
+    "base_url": "https://iot-api.landecia.com",
+    "accel_url": "wss://iot-south.landecia.com:8443/ws/v2",
+    "wf_domain": "U.SP.8589934603",
+    "secret_suffix": "pUTp5goB1bLinprRQMmK3EPiiuPiGrJtKUNptWRXVmP",
+    "realtime_attrs_url": "https://iot-api.netprisma.us/v2/binding/enduserapi/getDeviceBusinessAttributes"
+  },
+  "northamerica": {
+    "base_url": "https://iot-api.netprisma.us",
+    "accel_url": "wss://iot-south.netprisma.us:8443/ws/v2",
+    "wf_domain": "U.SP.8589934603",
+    "secret_suffix": "pUTp5goB1bLinprRQMmK3EPiiuPiGrJtKUNptWRXVmP",
+    "realtime_attrs_url": "https://iot-api.netprisma.us/v2/binding/enduserapi/getDeviceBusinessAttributes"
+  },
+  "europe": {
+    "base_url": "https://iot-api.acceleronix.io",
+    "accel_url": "wss://iot-south.acceleronix.io:8443/ws/v2",
+    "wf_domain": "E.SP.4294967410",
+    "secret_suffix": "3aRNUwWahjyANa7WfBK2wCCkxCexB6nXxKJwXxfePvzf",
+    "realtime_attrs_url": "https://iot-api.acceleronix.io/v2/binding/enduserapi/getDeviceBusinessAttributes"
+  },
+  "china": {
+    "base_url": "https://iot-api.quectelcn.com",
+    "accel_url": "wss://iot-south.quectelcn.com:8443/ws/v2",
+    "wf_domain": "C.DM.5903.1",
+    "secret_suffix": "EufftRJSuWuVY7c6txzGifV9bJcfXHAFa7hXY5doXSn7",
+    "realtime_attrs_url": "https://iot-api.quectelcn.com/v2/binding/enduserapi/getDeviceBusinessAttributes"
+  },
+  "europe-uat": {
+    "base_url": "https://uat-iot-api.acceleronix.io",
+    "accel_url": "wss://uat-iot-south.acceleronix.io:8443/ws/v2",
+    "wf_domain": "E.SP.4294967410",
+    "secret_suffix": "4oARJu9W1axes3atB37zmnPLVFpgqHs7YEMS622XXFvs",
+    "realtime_attrs_url": "https://uat-iot-api.acceleronix.io/v2/binding/enduserapi/getDeviceBusinessAttributes"
+  },
+  "northamerica-uat": {
+    "base_url": "https://uat-iot-api.quectelus.com",
+    "accel_url": "wss://uat-iot-south.quectelus.com:8443/ws/v2",
+    "wf_domain": "U.SP.8589934603",
+    "secret_suffix": "AKME5rKVH1eSevuGCHitNJ6tY28yGiGw6qHuVMQ7YyGQ",
+    "realtime_attrs_url": "https://uat-iot-api.quectelus.com/v2/binding/enduserapi/getDeviceBusinessAttributes"
+  },
+  "china-uat": {
+    "base_url": "https://uat-iot-api.quectelcn.com",
+    "accel_url": "wss://uat-iot-south.quectelcn.com:8443/ws/v2",
+    "wf_domain": "C.DM.5903.1",
+    "secret_suffix": "EufftRJSuWuVY7c6txzGifV9bJcfXHAFa7hXY5doXSn7",
+    "realtime_attrs_url": "https://uat-iot-api.quectelcn.com/v2/binding/enduserapi/getDeviceBusinessAttributes"
+  }
+}

@@ -39,6 +39,7 @@ from wf_config import (
 
     hex_bytes,
 )
+from wf_privacy import mask_topic
 
 def attach(Bridge):
     def _on_local_message(self, client, userdata, msg):
@@ -120,7 +121,7 @@ def attach(Bridge):
 
         remote_ok = self.remote is not None
         strat = SEND_STRATEGY
-        log.info(f"[CMD] route={strat} remote_ok={remote_ok} topic={BUS_TOPIC} hex={payload.hex()}")
+        log.info(f"[CMD] route={strat} remote_ok={remote_ok} topic={mask_topic(BUS_TOPIC)} hex={payload.hex()}")
 
         if strat == "cloud":
             if remote_ok:

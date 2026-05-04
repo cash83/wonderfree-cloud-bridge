@@ -72,6 +72,7 @@ Per usare questo bridge devi avere **un account attivo** nell'app ufficiale del 
 | `wf_email` | Email dell'account app | `utente@email.com` |
 | `wf_password` | Password dell'account app | `MiaPassword123` |
 | `app` | App con cui hai registrato il dispositivo | `wonderfree` |
+| `wf_device_key` | Opzionale: forza un dispositivo specifico se l'account ne ha piu di uno | `ABC123...` |
 
 ### Valori disponibili per `app`
 

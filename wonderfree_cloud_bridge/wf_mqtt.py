@@ -20,6 +20,7 @@ from wf_config import (
     PRODUCT_KEY, DEVICE_KEY,
 )
 from wf_crypto import normalize_bearer
+from wf_privacy import mask_topic, mask_value
 
 
 def attach(Bridge):
@@ -157,7 +158,7 @@ def attach(Bridge):
             now = time.time()
 
             if now - self._rt_last_log >= 10:
-                log.debug(f"[REMOTE] RX realtime: {self._rt_count} msg/10s (last topic: {topic})")
+                log.debug(f"[REMOTE] RX realtime: {self._rt_count} msg/10s (last topic: {mask_topic(topic)})")
                 self._rt_count = 0
                 self._rt_last_log = now
 
@@ -169,7 +170,7 @@ def attach(Bridge):
                 self._burst_until = now + 5.0
 
             if now < self._burst_until and "/sys_" not in topic:
-                log.debug(f"[REMOTE] BURST topic={topic} len={len(payload)} hex={payload[:64].hex()}")
+                log.debug(f"[REMOTE] BURST topic={mask_topic(topic)} len={len(payload)} hex={payload[:64].hex()}")
 
             if topic.endswith("/bus"):
                 self._pending_offline_since = 0.0
@@ -263,7 +264,7 @@ def attach(Bridge):
                         self._publish_from_ack_kv(self._ack_kv_buffer, now)
 
                 except Exception as e:
-                    log.debug(f"[ACK] parse error on {topic}: {e}")
+                    log.debug(f"[ACK] parse error on {mask_topic(topic)}: {e}")
 
         except Exception as e:
             log.warning(f"[REALTIME] Error processing message: {e}")
@@ -313,7 +314,7 @@ def attach(Bridge):
         jwt = normalize_bearer(tok)
 
         client_id = ACCEL_CLIENT or f"qu_{uuid.uuid4().hex[:6].upper()}_{int(time.time()*1000)}"
-        log.info(f"[REMOTE] MQTT client_id={client_id} len={len(client_id)}")
+        log.info(f"[REMOTE] MQTT client_id={mask_value(client_id)} len={len(client_id)}")
 
         cli = mqtt.Client(
             client_id=client_id,
@@ -337,7 +338,7 @@ def attach(Bridge):
             cli.connect(self.rhost, self.rport, keepalive=25)
             cli.loop_start()
             self.remote = cli
-            log.info(f"[REMOTE] Connected to {self.rhost}:{self.rport}{self.rpath} as {client_id} (mode={CLOUD_JWT_MODE})")
+            log.info(f"[REMOTE] Connected to {self.rhost}:{self.rport}{self.rpath} as {mask_value(client_id)} (mode={CLOUD_JWT_MODE})")
         except Exception as e:
             log.error(f"[REMOTE] connect failed: {e}")
             threading.Timer(10.0, self._connect_remote).start()

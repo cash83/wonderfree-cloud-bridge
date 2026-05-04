@@ -4,6 +4,7 @@ from __future__ import annotations
 import os, time, json, logging
 import atexit
 import logging.handlers
+from wf_privacy import mask_value
 
 # -------------------- CONFIG --------------------
 
@@ -54,7 +55,13 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
 
-_log_handler = logging.handlers.RotatingFileHandler("bridge.log", maxBytes=1_000_000, backupCount=5)
+# Keep third-party DEBUG logs from printing full URLs with dk/pk query params.
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("requests").setLevel(logging.WARNING)
+logging.getLogger("paho").setLevel(logging.WARNING)
+
+_log_path = os.getenv("LOG_FILE", "/data/bridge.log" if os.path.isdir("/data") else "bridge.log")
+_log_handler = logging.handlers.RotatingFileHandler(_log_path, maxBytes=1_000_000, backupCount=5)
 _log_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
 logging.getLogger().addHandler(_log_handler)
 
@@ -128,7 +135,7 @@ if REALTIME_ATTRS_URL.rstrip("/") == BASE_URL:
 log.info(f"[CONFIG] BASE_URL={BASE_URL}")
 log.info(f"[CONFIG] REALTIME_ATTRS_URL={REALTIME_ATTRS_URL}")
 log.info(f"[CONFIG] ACCEL_URL={ACCEL_URL}")
-log.info(f"[CONFIG] ACCEL_CLIENT={ACCEL_CLIENT}")
+log.info(f"[CONFIG] ACCEL_CLIENT={mask_value(ACCEL_CLIENT)}")
 
 
 # Poll timing (adaptive)
