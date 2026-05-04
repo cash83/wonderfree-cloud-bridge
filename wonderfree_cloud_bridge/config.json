@@ -1,6 +1,6 @@
 {
   "name": "Wonderfree Cloud Bridge",
-  "version": "1.7.2",
+  "version": "1.7.3",
   "slug": "wonderfree_cloud_bridge",
   "description": "Bridge MQTT per Home Assistant compatibile con dispositivi Acceleronix. Piattaforme: wonderfree, landbook, landecia, northamerica, europe, china. Inserisci solo email, password e piattaforma: tutto il resto viene scoperto automaticamente.",
   "arch": ["aarch64", "amd64", "armv7", "armhf", "i386"],
